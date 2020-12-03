@@ -25,3 +25,19 @@ retrieve_keys_hash_table <- function(){
     dbGetQuery(con, "SELECT key FROM hashes;")$key
 }
 
+drop_archive_pkg_dates_into_table <- function(df){
+    names(df) <- c("key", "datetime")
+    df <- df[!is.na(df$key),]
+    df <- df[!df$key %in% retrieve_keys_package_date(),]
+    if(nrow(df)>0){
+        dbAppendTable(con, name="package_date",
+                                    value=df)
+        log_info("Wrote {nrow(df)} rows in table package_date")        
+    }else{
+        log_info("No new packages")
+    }
+}
+
+retrieve_keys_package_date <- function(){
+    dbGetQuery(con, "SELECT key FROM package_date;")$key
+}

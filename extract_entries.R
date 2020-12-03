@@ -71,6 +71,9 @@ archive_packages <- retrieve_archive_links()
 # all that into a list. There is no way to do this faster, because we don't 
 # know when it was changed. (there is some informaiton in the page, we could use.)
 all_archived_packages <- purrr::map(archive_packages, find_all_archived_on_package_page)
+log_info("Extracting date information of all archived packages")
+purrr::walk(archive_packages, find_all_archived_dates)
+
 
 # download all archive packages and process
 archival_packages_links <- unlist(all_archived_packages) #flatten the list into a vector

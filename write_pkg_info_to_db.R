@@ -19,6 +19,7 @@ con <- DBI::dbConnect(RSQLite::SQLite(),"export/database.db")
 source("sqlite_setup.R")
 source("info_to_db.R")
 source("extract_namespace.R")
+source("description_parser.R")
 #### settings 
 CRANEXTRACT <- "CRAN"
 current_date <- as.character(Sys.Date())
@@ -27,7 +28,8 @@ log_threshold(INFO)
 log_info('files to db Script start ')
 create_tables_when_necessary()
 all_packages <- as.character(fs::dir_ls(CRANEXTRACT))
-
+all_packages <- all_packages[str_detect(all_packages,"_")]
+log_info("there are currently {length(all_packages)} packages on disk")
 ####  INFO to db
 hash_done <-paste0(CRANEXTRACT, "/",retrieve_keys_hash_table())
 if(length(hash_done)==length(all_packages)){
@@ -49,6 +51,23 @@ if(length(namespace_done) == length(all_packages)){
         drop_pkg_namespace_into_db
     )    
 }
+### Parse archive date info 
+log_info("parsing data/archive_links.csv")
+archive_dates <- readr::read_csv("data/archive_dates.csv")
+drop_archive_pkg_dates_into_table(archive_dates)
 
+### parse Description files
+
+to_skip <- DESCRIPTION_all_done()
+to_parse_description <- all_packages[!all_packages %in% paste0(CRANEXTRACT,"/",to_skip)]
+#stopifnot(length(to_parse_description) + length(to_skip) == length(all_packages))
+
+log_info(" parsing {length(to_parse_description)} package DESCRIPTIONs of {length(all_packages)} total pkgs")
+purrr::walk(to_parse_description, parse_description_file)
+# description_done 
+# all_folders
+## why do I have a folder CRAN/NA?
+
+## stop
 log_info('files to db Script stop ')
 dbDisconnect(con)

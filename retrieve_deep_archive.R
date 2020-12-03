@@ -17,7 +17,6 @@ retrieve_archive_links <- function(){
     questionmarks <-  !stringr::str_starts(links,"\\?")
     
     paste0(archive_page, links[questionmarks & none])
-    
 }
 
 
@@ -35,6 +34,31 @@ find_all_archived_on_package_page <- function(page){
     result
 }
 
+find_all_archived_dates <- function(page){
+    log_debug("searching archive for {page}")
+    httr::with_config(config = agent,{
+        text_example <- 
+            read_html(page) %>% 
+            html_node("pre") %>% 
+            html_text(trim = TRUE) %>% 
+            strsplit(split="\n") %>% 
+            unlist()
+    } )
+    pkg_archive_links <- text_example[stringr::str_detect(text_example,"tar.gz")] %>% stringr::str_trim(side="both")
+    pkgs <- pkg_archive_links %>% stringr::str_extract_all("[A-z0-9._-]+\\.tar\\.gz") %>% unlist() %>% trimws(which="both")
+    if(length(pkgs)>0){
+        date_time <- pkg_archive_links %>% stringr::str_extract_all("[0-9]{4}-[0-9]{1,2}-[0-9]{1,2} [0-9]{1,2}:[0-9]{2}") %>% unlist()
+        data.frame(
+            pkg = pkgs,
+            datetime=date_time
+        ) %>% readr::write_csv(file = "data/archive_dates.csv",
+                               append = TRUE)
+    }else{
+        log_warn("No pkg_archive links found for {page}")
+    }
+}
+
+readr::write_csv(data.frame(pkg=character(0), datetime=character(0)), file = "data/archive_dates.csv")
 
 
 
