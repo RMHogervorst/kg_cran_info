@@ -1,7 +1,8 @@
 ##### functions  -----
 replace_null <- function(x){ifelse(is.null(x), NA_character_, x)}
 fill_with_values <- function(listobject, lenghts){
-    rep(purrr::map_chr(listobject, replace_null),lenghts)
+    res <- rep(purrr::map_chr(listobject, paste, collapse=" "),lenghts)
+    ifelse(res=="", NA_character_, res)
 }
 # extract all authors. author name, email role
 extract_orchid <- function(comment){
@@ -21,8 +22,59 @@ entity_role <- function(authors){
     res$ORCID <- extract_orchid(res$comment)
     res
 }
+
+make_email_adresses_correct<- function(string){
+    string %>% 
+    str_remove_all( "\\\\email") %>% 
+    str_remove_all( "email =") %>% 
+    str_replace_all(" ([+A-z0-9._-]+)\\@([A-z0-9.-]+) *"," <\\1@\\2> ") %>% 
+    str_replace_all("[\\{\\(]{1}([+A-z0-9._-]+)\\@+([A-z0-9.-]+)[\\}\\)]{1}","<\\1@\\2> ")
+}
+# "Bailey Fosdick (bfosdick@uw.edu)"
+# "Leontine Alkema (alkema@nus.edu.sg), Adrian Raftery (raftery@uw.edu)"
+#  "Marcus G. Daniels mgd@swarm.org"
+#  "Dr. Sanjay Bhatikar <sanjay.bhatikar@biobase.in>, Kanika Arora <kanika.arora@biobase." # dont
+# "Valentin Todorov <valentin.todorov@chello.at>, Maria Anna Di Palma <madipalma@unior.it> and Michele Gallo \\email{mgallo@unior.it}"
+fix_author_inconsistencies <- function(person){
+    person %>% 
+        make_email_adresses_correct() %>% 
+        str_replace_all(";|&| and ",",") %>% # replace invalids & and ;
+        str_replace_all(", and ", ", ") %>%  # oxford comma is killing me
+        str_replace_all(">\\.", "> ") %>%  # replace invalid .
+        str_replace_all(">,([A-z]+)", ">, \\1") %>%  # make sure there is a space after comma
+        str_replace_all(">([A-z]+)", ">, \\1") %>%  # add a column if there are multiple
+        str_replace_all("(>) +([A-z])", "\\1, \\2") %>% 
+        str_replace_all(",,", ",") %>% 
+        str_replace_all(", ,", ", ") %>% 
+        str_replace_all(",([A-z]+)", ", \\1") %>% 
+        str_replace_all(">, (\\[[a-z ]{3,}\\])", "> \\1")  # fix my own mistakes
+}
+
+place_comment <- function(given, comment, searchtext){
+    idl <- str_detect(given, searchtext)
+    comment[idl] <- searchtext
+    comment
+}
+
+move_comments<- function(authors_df){
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "S original by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "R port by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "with contributions by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "with contributions from")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "[Aa]dditional contributions by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "[Pp]ackaged for R by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "[Bb]ased on earlier work by")
+    authors_df$comment <- place_comment(authors_df$given, authors_df$comment, "with [A-z ]+ by|with [A-z ]+ from")
+    # Based on earlier work by
+    authors_df$given <- str_remove(authors_df$given, 
+                                   "S original by|R port by|with contributions by|[Pp]ackaged for R by|with contributions from")
+    authors_df$given <- str_remove(authors_df$given,"with [A-z ]+ by|with [A-z ]+ from|[Aa]dditional contributions by|[Bb]ased on earlier work by")
+    authors_df
+}
+
 make_person <- function(person, role=NULL){
     if(is.null(role))stop("supply role in make_person",call. = FALSE)
+    person <- fix_author_inconsistencies(person)
     personas <- as.person(person)
     if(length(personas)==1){
         if(is.null(personas$role)){personas$role <- role}
@@ -72,20 +124,42 @@ extract_key <- function(pkg){
     version <- extract_from_line(pkg, "Version")
     paste0(package,"_", version)
 }
+fix_atR_inconsistencies <- function(text){
+    # make email quoted
+    text %>% 
+    str_replace_all("[\'\"]{1}email[\'\"]*[ ]*= ", "email = ") %>% 
+    str_replace_all("[ \'\"]([+A-z0-9._-]+)\\@([A-z0-9.-]+)[ \'\"]"," \"\\1@\\2\" ")
+}
+# c(person( \"Margaux Armfield\", \"email = margaux.armfield@gmail.com\", role = \"aut\"), person(\"Kennedy Dorsey\", email = \"kadorsey97@gmail.com\", role = c(\"aut\", \"cre\")))"
+
 # parse authors@R
 parse_authors <- function(flattened_pkg){
     atRperson <- as.person(NULL)
-    atR <- extract_from_line(flattened_pkg,"Authors@R")
+    atR <- extract_from_line(flattened_pkg,"Authors@R") %>% 
+        str_replace_all("\\s", " ") %>% 
+        str_replace_all("[ ]+", " ")
     if(length(atR) >0){
-        atRperson <- as.person(parse(text=atR))
+        atRperson <- eval(parse(text=atR %>% fix_atR_inconsistencies()))
     }
-    authors <- c(
-        make_person(extract_from_line(flattened_pkg,"Author"),role = "aut"),
-        make_person(extract_from_line(flattened_pkg,"Maintainer"), role="cre"),
-        atRperson
-    )
+    ## dealing with authors@R that are placed in Author
+    if(str_detect(extract_from_line(flattened_pkg,"Author"), "person\\(")){
+        authors <- c(
+            make_person(extract_from_line(flattened_pkg,"Maintainer"), role="cre"),
+            extract_from_line(flattened_pkg,"Author") %>% 
+                str_replace_all("\\s", " ") %>% 
+                str_replace_all("[ ]+", " ") %>% 
+                parse(text=.) %>% 
+                eval()
+        )
+    }else{
+        authors <- c(
+            make_person(extract_from_line(flattened_pkg,"Author"),role = "aut"),
+            make_person(extract_from_line(flattened_pkg,"Maintainer"), role="cre"),
+            atRperson   
+            )
+    }
     authors_df <- entity_role(authors)
-    
+    authors_df <- move_comments(authors_df)
     authors_df[!duplicated(authors_df),]
 }
 

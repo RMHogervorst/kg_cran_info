@@ -81,7 +81,7 @@ local_packages <- paste0(check_local_packages(),".tar.gz")
 
 archive_download <- archival_packages_links[!archival_packages_links %>% extract_p_name_from_url() %in% local_packages]
 archive_download <- archive_download[archive_download != "NA"]
-
+archive_download <- archive_download[archive_download != "README"]
 log_info("archive to download reduced from {length(archival_packages_links)} to {length(archive_download)}")
 purrr::walk(archive_download, download_and_extract)
 

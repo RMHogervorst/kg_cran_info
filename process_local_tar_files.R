@@ -71,15 +71,20 @@ extract_p_name_from_url <- function(url){
 
 download_and_extract <- function(link){
     pkgname <- extract_p_name_from_url(link)
-    log_info("Downloading and parsing {pkgname}")
-    location <- paste0(templocation, "/",pkgname)
-    try(download_tarfile(link, location))
-    if(fs::file_exists(location)){
-        untar_files_and_extract_info(location)
+    if(pkgname == "README"){
+        log_info("not a file")
+    }else{
+        log_info("Downloading and parsing {pkgname}")
+        location <- paste0(templocation, "/",pkgname)
+        try(download_tarfile(link, location))
+        if(fs::file_exists(location)){
+            untar_files_and_extract_info(location)
+        }
     }
 }
 
 
 check_local_packages <- function(){
-    basename(as.character(fs::dir_ls(path =CRANEXTRACT)))
+    pkgs<- basename(as.character(fs::dir_ls(path =CRANEXTRACT)))
+    pkgs[grepl("_", pkgs)]
 }

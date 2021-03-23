@@ -70,4 +70,4 @@ purrr::walk(to_parse_description, parse_description_file)
 
 ## stop
 log_info('files to db Script stop ')
-dbDisconnect(con)
+DBI::dbDisconnect(con)
