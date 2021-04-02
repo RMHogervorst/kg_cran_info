@@ -6,7 +6,7 @@ fill_with_values <- function(listobject, lenghts){
 }
 # extract all authors. author name, email role
 extract_orchid <- function(comment){
-    str_extract(comment, "[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}")
+    str_extract(comment, "[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9X]{4}")
 }
 # one row per role
 entity_role <- function(authors){
